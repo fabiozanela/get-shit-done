@@ -964,14 +964,22 @@ purpose: ${toSingleLine(description)}
 
 /**
  * Generate a per-agent .toml config file for Codex.
- * Sets sandbox_mode and developer_instructions from the agent markdown body.
+ * Sets required agent metadata, sandbox_mode, and developer_instructions
+ * from the agent markdown content.
  */
 function generateCodexAgentToml(agentName, agentContent) {
   const sandboxMode = CODEX_AGENT_SANDBOX[agentName] || 'read-only';
-  const { body } = extractFrontmatterAndBody(agentContent);
+  const { frontmatter, body } = extractFrontmatterAndBody(agentContent);
+  const frontmatterText = frontmatter || '';
+  const resolvedName = extractFrontmatterField(frontmatterText, 'name') || agentName;
+  const resolvedDescription = toSingleLine(
+    extractFrontmatterField(frontmatterText, 'description') || `GSD agent ${resolvedName}`
+  );
   const instructions = body.trim();
 
   const lines = [
+    `name = ${JSON.stringify(resolvedName)}`,
+    `description = ${JSON.stringify(resolvedDescription)}`,
     `sandbox_mode = "${sandboxMode}"`,
     // Agent prompts contain raw backslashes in regexes and shell snippets.
     // TOML literal multiline strings preserve them without escape parsing.

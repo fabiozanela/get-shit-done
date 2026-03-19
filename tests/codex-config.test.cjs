@@ -160,6 +160,19 @@ tools: Read, Grep, Glob
     assert.ok(result.includes("'''"), 'has closing literal triple quotes');
   });
 
+  test('includes required name and description fields', () => {
+    const result = generateCodexAgentToml('gsd-executor', sampleAgent);
+    assert.ok(result.includes('name = "gsd-executor"'), 'has name');
+    assert.ok(result.includes('description = "Executes plans"'), 'has description');
+  });
+
+  test('falls back to generated description when frontmatter is missing fields', () => {
+    const minimalAgent = `<role>You are an unknown agent.</role>`;
+    const result = generateCodexAgentToml('gsd-unknown', minimalAgent);
+    assert.ok(result.includes('name = "gsd-unknown"'), 'falls back to agent name');
+    assert.ok(result.includes('description = "GSD agent gsd-unknown"'), 'falls back to synthetic description');
+  });
+
   test('defaults unknown agents to read-only', () => {
     const result = generateCodexAgentToml('gsd-unknown', sampleAgent);
     assert.ok(result.includes('sandbox_mode = "read-only"'), 'defaults to read-only');
@@ -515,10 +528,13 @@ describe('installCodexConfig (integration)', () => {
     assert.ok(fs.existsSync(path.join(agentsDir, 'gsd-plan-checker.toml')), 'plan-checker .toml exists');
 
     const executorToml = fs.readFileSync(path.join(agentsDir, 'gsd-executor.toml'), 'utf8');
+    assert.ok(executorToml.includes('name = "gsd-executor"'), 'executor has name');
+    assert.ok(executorToml.includes('description = "Executes GSD plans with atomic commits, deviation handling, checkpoint protocols, and state management. Spawned by execute-phase orchestrator or execute-plan command."'), 'executor has description');
     assert.ok(executorToml.includes('sandbox_mode = "workspace-write"'), 'executor is workspace-write');
     assert.ok(executorToml.includes('developer_instructions'), 'has developer_instructions');
 
     const checkerToml = fs.readFileSync(path.join(agentsDir, 'gsd-plan-checker.toml'), 'utf8');
+    assert.ok(checkerToml.includes('name = "gsd-plan-checker"'), 'plan-checker has name');
     assert.ok(checkerToml.includes('sandbox_mode = "read-only"'), 'plan-checker is read-only');
   });
 });
