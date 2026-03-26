@@ -16,7 +16,8 @@ function cmdGenerateSlug(text, raw) {
   const slug = text
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/^-+|-+$/g, '')
+    .substring(0, 60);
 
   const result = { slug };
   output(result, raw, slug);

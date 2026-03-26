@@ -366,6 +366,17 @@ describe('generateSlugInternal', () => {
   test('returns null for empty string', () => {
     assert.strictEqual(generateSlugInternal(''), null);
   });
+
+  test('strips newlines and control characters', () => {
+    assert.strictEqual(generateSlugInternal('hello\nworld'), 'hello-world');
+    assert.strictEqual(generateSlugInternal('tab\there'), 'tab-here');
+  });
+
+  test('truncates to 60 characters', () => {
+    const long = 'a'.repeat(100);
+    const result = generateSlugInternal(long);
+    assert.ok(result.length <= 60, `slug should be <=60 chars, got ${result.length}`);
+  });
 });
 
 // ─── normalizePhaseName / comparePhaseNum ──────────────────────────────────────
