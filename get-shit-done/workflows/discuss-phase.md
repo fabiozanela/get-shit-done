@@ -155,6 +155,11 @@ Exit workflow.
 - In `discuss_areas`: for each discussion question, choose the recommended option (first option, or the one marked "recommended") without using AskUserQuestion
 - Log each auto-selected choice inline so the user can review decisions in the context file
 - After discussion completes, auto-advance to plan-phase (existing behavior)
+
+**Chain mode** — If `--chain` is present in ARGUMENTS:
+- Discussion is fully interactive (questions, gray area selection — same as default mode)
+- After discussion completes, auto-advance to plan-phase → execute-phase (same as `--auto`)
+- This is the middle ground: user controls the discuss decisions, then plan+execute run autonomously
 </step>
 
 <step name="check_existing">
@@ -181,6 +186,26 @@ If "View": Display CONTEXT.md, then offer update/skip
 If "Skip": Exit workflow
 
 **If doesn't exist:**
+
+**Check for interrupted discussion checkpoint:**
+
+```bash
+ls ${phase_dir}/*-DISCUSS-CHECKPOINT.json 2>/dev/null || true
+```
+
+If a checkpoint file exists (previous session was interrupted before CONTEXT.md was written):
+
+**If `--auto`:** Auto-select "Resume" — load checkpoint and continue from last completed area.
+
+**Otherwise:** Use AskUserQuestion:
+- header: "Resume"
+- question: "Found interrupted discussion checkpoint ({N} areas completed out of {M}). Resume from where you left off?"
+- options:
+  - "Resume" — Load checkpoint, skip completed areas, continue discussion
+  - "Start fresh" — Delete checkpoint, start discussion from scratch
+
+If "Resume": Parse the checkpoint JSON. Load `decisions` into the internal accumulator. Set `areas_completed` to skip those areas. Continue to `present_gray_areas` with only the remaining areas.
+If "Start fresh": Delete the checkpoint file. Continue as if no checkpoint existed.
 
 Check `has_plans` and `plan_count` from init. **If `has_plans` is true:**
 
@@ -640,6 +665,16 @@ Each answer (or answer set, in batch mode) should reveal the next question or ne
 ```
 After all areas are auto-resolved, skip the "Explore more gray areas" prompt and proceed directly to write_context.
 
+**CRITICAL — Auto-mode pass cap:**
+In `--auto` mode, the discuss step MUST complete in a **single pass**. After writing CONTEXT.md once, you are DONE — proceed immediately to write_context and then auto_advance. Do NOT re-read your own CONTEXT.md to find "gaps", "undefined types", or "missing decisions" and run additional passes. This creates a self-feeding loop where each pass generates references that the next pass treats as gaps, consuming unbounded time and resources.
+
+Check the pass cap from config:
+```bash
+MAX_PASSES=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.max_discuss_passes 2>/dev/null || echo "3")
+```
+
+If you have already written and committed CONTEXT.md, the discuss step is complete. Move on.
+
 **Interactive mode (no `--auto`):**
 
 **For each area:**
@@ -718,6 +753,44 @@ Back to [current area]: [return to current question]"
 ```
 
 Track deferred ideas internally.
+
+**Incremental checkpoint — save after each area completes:**
+
+After each area is resolved (user says "Next area" or area auto-resolves in `--auto` mode), immediately write a checkpoint file with all decisions captured so far. This prevents data loss if the session is interrupted mid-discussion.
+
+**Checkpoint file:** `${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json`
+
+Write after each area:
+```json
+{
+  "phase": "{PHASE_NUM}",
+  "phase_name": "{phase_name}",
+  "timestamp": "{ISO timestamp}",
+  "areas_completed": ["Area 1", "Area 2"],
+  "areas_remaining": ["Area 3", "Area 4"],
+  "decisions": {
+    "Area 1": [
+      {"question": "...", "answer": "...", "options_presented": ["..."]},
+      {"question": "...", "answer": "...", "options_presented": ["..."]}
+    ],
+    "Area 2": [
+      {"question": "...", "answer": "...", "options_presented": ["..."]}
+    ]
+  },
+  "deferred_ideas": ["..."],
+  "canonical_refs": ["..."]
+}
+```
+
+This is a structured checkpoint, not the final CONTEXT.md — the `write_context` step still produces the canonical output. But if the session dies, the next `gsd:discuss-phase` invocation can detect this checkpoint and offer to resume from it instead of starting from scratch.
+
+**On session resume:** In the `check_existing` step, also check for `*-DISCUSS-CHECKPOINT.json`. If found and no CONTEXT.md exists:
+- Display: "Found interrupted discussion checkpoint ({N} areas completed). Resume from checkpoint?"
+- Options: "Resume" / "Start fresh"
+- On "Resume": Load the checkpoint, skip completed areas, continue from where it left off
+- On "Start fresh": Delete the checkpoint, proceed as normal
+
+**After write_context completes successfully:** Delete the checkpoint file — the canonical CONTEXT.md now has all decisions.
 
 **Track discussion log data internally:**
 For each question asked, accumulate:
@@ -880,6 +953,7 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 ---
 
 **Also available:**
+- `/gsd:discuss-phase ${PHASE} --chain ${GSD_WS}` — re-run with auto plan+execute after
 - `/gsd:plan-phase ${PHASE} --skip-research ${GSD_WS}` — plan without research
 - `/gsd:ui-phase ${PHASE} ${GSD_WS}` — generate UI design contract before planning (if phase has frontend work)
 - Review/edit CONTEXT.md before continuing
@@ -933,6 +1007,12 @@ Created: .planning/phases/${PADDED_PHASE}-${SLUG}/${PADDED_PHASE}-CONTEXT.md
 
 Write file.
 
+**Clean up checkpoint file** — CONTEXT.md is now the canonical record:
+
+```bash
+rm -f "${phase_dir}/${padded_phase}-DISCUSS-CHECKPOINT.json"
+```
+
 Commit phase context and discussion log:
 
 ```bash
@@ -961,10 +1041,10 @@ node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" commit "docs(state): record
 <step name="auto_advance">
 Check for auto-advance trigger:
 
-1. Parse `--auto` flag from $ARGUMENTS
-2. **Sync chain flag with intent** — if user invoked manually (no `--auto`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference):
+1. Parse `--auto` and `--chain` flags from $ARGUMENTS
+2. **Sync chain flag with intent** — if user invoked manually (no `--auto` and no `--chain`), clear the ephemeral chain flag from any previous interrupted `--auto` chain. This does NOT touch `workflow.auto_advance` (the user's persistent settings preference):
    ```bash
-   if [[ ! "$ARGUMENTS" =~ --auto ]]; then
+   if [[ ! "$ARGUMENTS" =~ --auto ]] && [[ ! "$ARGUMENTS" =~ --chain ]]; then
      node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active false 2>/dev/null
    fi
    ```
@@ -974,12 +1054,12 @@ Check for auto-advance trigger:
    AUTO_CFG=$(node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-get workflow.auto_advance 2>/dev/null || echo "false")
    ```
 
-**If `--auto` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct `--auto` usage without new-project):
+**If `--auto` or `--chain` flag present AND `AUTO_CHAIN` is not true:** Persist chain flag to config (handles direct usage without new-project):
 ```bash
 node "$HOME/.claude/get-shit-done/bin/gsd-tools.cjs" config-set workflow._auto_chain_active true
 ```
 
-**If `--auto` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**
+**If `--auto` flag present OR `--chain` flag present OR `AUTO_CHAIN` is true OR `AUTO_CFG` is true:**
 
 Display banner:
 ```
@@ -1006,7 +1086,7 @@ This keeps the auto-advance chain flat — discuss, plan, and execute all run at
 
   Auto-advance pipeline finished: discuss → plan → execute
 
-  Next: /gsd:discuss-phase ${NEXT_PHASE} --auto ${GSD_WS}
+  Next: /gsd:discuss-phase ${NEXT_PHASE} ${WAS_CHAIN ? "--chain" : "--auto"} ${GSD_WS}
   <sub>/clear first → fresh context window</sub>
   ```
 - **PLANNING COMPLETE** → Planning done, execution didn't complete:
@@ -1025,7 +1105,7 @@ This keeps the auto-advance chain flat — discuss, plan, and execute all run at
   Continue: /gsd:plan-phase ${PHASE} --gaps ${GSD_WS}
   ```
 
-**If neither `--auto` nor config enabled:**
+**If none of `--auto`, `--chain`, nor config enabled:**
 Route to `confirm_creation` step (existing behavior — show manual next steps).
 </step>
 
@@ -1046,4 +1126,9 @@ Route to `confirm_creation` step (existing behavior — show manual next steps).
 - Deferred ideas preserved for future phases
 - STATE.md updated with session info
 - User knows next steps
+- Checkpoint file written after each area completes (incremental save)
+- Interrupted sessions can be resumed from checkpoint (no re-answering completed areas)
+- Checkpoint file cleaned up after successful CONTEXT.md write
+- `--chain` triggers interactive discuss followed by auto plan+execute (no auto-answering)
+- `--chain` and `--auto` both persist chain flag and auto-advance to plan-phase
 </success_criteria>

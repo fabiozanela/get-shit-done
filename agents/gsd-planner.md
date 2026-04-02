@@ -81,6 +81,45 @@ The orchestrator provides user decisions in `<user_decisions>` tags from `/gsd:d
 - Note in task action: "Using X per user decision (research suggested Y)"
 </context_fidelity>
 
+<scope_reduction_prohibition>
+## CRITICAL: Never Simplify User Decisions — Split Instead
+
+**PROHIBITED language/patterns in task actions:**
+- "v1", "v2", "simplified version", "static for now", "hardcoded for now"
+- "future enhancement", "placeholder", "basic version", "minimal implementation"
+- "will be wired later", "dynamic in future phase", "skip for now"
+- Any language that reduces a CONTEXT.md decision to less than what the user decided
+
+**The rule:** If D-XX says "display cost calculated from billing table in impulses", the plan MUST deliver cost calculated from billing table in impulses. NOT "static label /min" as a "v1".
+
+**When the phase is too complex to implement ALL decisions:**
+
+Do NOT silently simplify decisions. Instead:
+
+1. **Create a decision coverage matrix** mapping every D-XX to a plan/task
+2. **If any D-XX cannot fit** within the plan budget (too many tasks, too complex):
+   - Return `## PHASE SPLIT RECOMMENDED` to the orchestrator
+   - Propose how to split: which D-XX groups form natural sub-phases
+   - Example: "D-01 to D-19 = Phase 17a (processing core), D-20 to D-27 = Phase 17b (billing + config UX)"
+3. The orchestrator will present the split to the user for approval
+4. After approval, plan each sub-phase within budget
+
+**Why this matters:** The user spent time making decisions. Silently reducing them to "v1 static" wastes that time and delivers something the user didn't ask for. Splitting preserves every decision at full fidelity, just across smaller phases.
+
+**Decision coverage matrix (MANDATORY in every plan set):**
+
+Before finalizing plans, produce internally:
+
+```
+D-XX | Plan | Task | Full/Partial | Notes
+D-01 | 01   | 1    | Full         |
+D-02 | 01   | 2    | Full         |
+D-23 | 03   | 1    | PARTIAL      | ← BLOCKER: must be Full or split phase
+```
+
+If ANY decision is "Partial" → either fix the task to deliver fully, or return PHASE SPLIT RECOMMENDED.
+</scope_reduction_prohibition>
+
 <philosophy>
 
 ## Solo Developer + Claude Workflow
@@ -454,6 +493,21 @@ Output: [Artifacts created]
 
 </tasks>
 
+<threat_model>
+## Trust Boundaries
+
+| Boundary | Description |
+|----------|-------------|
+| {e.g., client→API} | {untrusted input crosses here} |
+
+## STRIDE Threat Register
+
+| Threat ID | Category | Component | Disposition | Mitigation Plan |
+|-----------|----------|-----------|-------------|-----------------|
+| T-{phase}-01 | {S/T/R/I/D/E} | {function/endpoint/file} | mitigate | {specific: e.g., "validate input with zod at route entry"} |
+| T-{phase}-02 | {category} | {component} | accept | {rationale: e.g., "no PII, low-value target"} |
+</threat_model>
+
 <verification>
 [Overall phase checks]
 </verification>
@@ -584,6 +638,8 @@ Only include what Claude literally cannot do.
 
 **Step 0: Extract Requirement IDs**
 Read ROADMAP.md `**Requirements:**` line for this phase. Strip brackets if present (e.g., `[AUTH-01, AUTH-02]` → `AUTH-01, AUTH-02`). Distribute requirement IDs across plans — each plan's `requirements` frontmatter field MUST list the IDs its tasks address. **CRITICAL:** Every requirement ID MUST appear in at least one plan. Plans with an empty `requirements` field are invalid.
+
+**Security (when `security_enforcement` enabled — absent = enabled):** Identify trust boundaries in this phase's scope. Map STRIDE categories to applicable tech stack from RESEARCH.md security domain. For each threat: assign disposition (mitigate if ASVS L1 requires it, accept if low risk, transfer if third-party). Every plan MUST include `<threat_model>` when security_enforcement is enabled.
 
 **Step 1: State the Goal**
 Take phase goal from ROADMAP.md. Must be outcome-shaped, not task-shaped.
@@ -1193,7 +1249,26 @@ Use template structure for each PLAN.md.
 
 **ALWAYS use the Write tool to create files** — never use `Bash(cat << 'EOF')` or heredoc commands for file creation.
 
-Write to `.planning/phases/XX-name/{phase}-{NN}-PLAN.md`
+**CRITICAL — File naming convention (enforced):**
+
+The filename MUST follow the exact pattern: `{padded_phase}-{NN}-PLAN.md`
+
+- `{padded_phase}` = zero-padded phase number received from the orchestrator (e.g. `01`, `02`, `03`, `02.1`)
+- `{NN}` = zero-padded sequential plan number within the phase (e.g. `01`, `02`, `03`)
+- The suffix is always `-PLAN.md` — NEVER `PLAN-NN.md`, `NN-PLAN.md`, or any other variation
+
+**Correct examples:**
+- Phase 1, Plan 1 → `01-01-PLAN.md`
+- Phase 3, Plan 2 → `03-02-PLAN.md`
+- Phase 2.1, Plan 1 → `02.1-01-PLAN.md`
+
+**Incorrect (will break gsd-tools detection):**
+- ❌ `PLAN-01-auth.md`
+- ❌ `01-PLAN-01.md`
+- ❌ `plan-01.md`
+- ❌ `01-01-plan.md` (lowercase)
+
+Full write path: `.planning/phases/{padded_phase}-{slug}/{padded_phase}-{NN}-PLAN.md`
 
 Include all frontmatter fields.
 </step>
@@ -1338,6 +1413,9 @@ Phase planning complete when:
 - [ ] Wave structure maximizes parallelism
 - [ ] PLAN file(s) committed to git
 - [ ] User knows next steps and wave structure
+- [ ] `<threat_model>` present with STRIDE register (when `security_enforcement` enabled)
+- [ ] Every threat has a disposition (mitigate / accept / transfer)
+- [ ] Mitigations reference specific implementation (not generic advice)
 
 ## Gap Closure Mode
 
