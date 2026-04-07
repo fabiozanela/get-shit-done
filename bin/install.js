@@ -63,6 +63,7 @@ const hasOpencode = args.includes('--opencode');
 const hasClaude = args.includes('--claude');
 const hasGemini = args.includes('--gemini');
 const hasKilo = args.includes('--kilo');
+const hasKiro = args.includes('--kiro');
 const hasCodex = args.includes('--codex');
 const hasCopilot = args.includes('--copilot');
 const hasAntigravity = args.includes('--antigravity');
@@ -77,7 +78,7 @@ const hasUninstall = args.includes('--uninstall') || args.includes('-u');
 // Runtime selection - can be set by flags or interactive prompt
 let selectedRuntimes = [];
 if (hasAll) {
-  selectedRuntimes = ['claude', 'kilo', 'opencode', 'gemini', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment', 'trae'];
+  selectedRuntimes = ['claude', 'kiro', 'kilo', 'opencode', 'gemini', 'codex', 'copilot', 'antigravity', 'cursor', 'windsurf', 'augment', 'trae'];
 } else if (hasBoth) {
   selectedRuntimes = ['claude', 'opencode'];
 } else {
@@ -85,6 +86,7 @@ if (hasAll) {
   if (hasOpencode) selectedRuntimes.push('opencode');
   if (hasGemini) selectedRuntimes.push('gemini');
   if (hasKilo) selectedRuntimes.push('kilo');
+  if (hasKiro) selectedRuntimes.push('kiro');
   if (hasCodex) selectedRuntimes.push('codex');
   if (hasCopilot) selectedRuntimes.push('copilot');
   if (hasAntigravity) selectedRuntimes.push('antigravity');
@@ -134,6 +136,7 @@ function getDirName(runtime) {
   if (runtime === 'opencode') return '.opencode';
   if (runtime === 'gemini') return '.gemini';
   if (runtime === 'kilo') return '.kilo';
+  if (runtime === 'kiro') return '.kiro';
   if (runtime === 'codex') return '.codex';
   if (runtime === 'antigravity') return '.agent';
   if (runtime === 'cursor') return '.cursor';
@@ -163,6 +166,7 @@ function getConfigDirFromHome(runtime, isGlobal) {
   }
   if (runtime === 'gemini') return "'.gemini'";
   if (runtime === 'kilo') return "'.config', 'kilo'";
+  if (runtime === 'kiro') return "'.kiro'";
   if (runtime === 'codex') return "'.codex'";
   if (runtime === 'antigravity') {
     if (!isGlobal) return "'.agent'";
@@ -226,6 +230,18 @@ function getKiloGlobalDir() {
 }
 
 /**
+ * Get the global config directory for Kiro
+ * Kiro uses ~/.kiro by default
+ * Priority: KIRO_CONFIG_DIR > ~/.kiro
+ */
+function getKiroGlobalDir() {
+  if (process.env.KIRO_CONFIG_DIR) {
+    return expandTilde(process.env.KIRO_CONFIG_DIR);
+  }
+  return path.join(os.homedir(), '.kiro');
+}
+
+/**
  * Get the global config directory for a runtime
  * @param {string} runtime - 'claude', 'opencode', 'gemini', 'codex', or 'copilot'
  * @param {string|null} explicitDir - Explicit directory from --config-dir flag
@@ -245,6 +261,14 @@ function getGlobalDir(runtime, explicitDir = null) {
       return expandTilde(explicitDir);
     }
     return getKiloGlobalDir();
+  }
+
+  if (runtime === 'kiro') {
+    // Kiro: --config-dir > KIRO_CONFIG_DIR > ~/.kiro
+    if (explicitDir) {
+      return expandTilde(explicitDir);
+    }
+    return getKiroGlobalDir();
   }
 
   if (runtime === 'gemini') {
@@ -355,7 +379,7 @@ const banner = '\n' +
   '\n' +
   '  Get Shit Done ' + dim + 'v' + pkg.version + reset + '\n' +
   '  A meta-prompting, context engineering and spec-driven\n' +
-  '  development system for Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Antigravity, Cursor, Windsurf, Augment and Trae by TÂCHES.\n';
+  '  development system for Claude Code, OpenCode, Gemini, Kilo, Kiro, Codex, Copilot, Antigravity, Cursor, Windsurf, Augment and Trae by TÂCHES.\n';
 
 // Parse --config-dir argument
 function parseConfigDirArg() {
@@ -393,7 +417,7 @@ if (hasUninstall) {
 
 // Show help if requested
 if (hasHelp) {
-  console.log(`  ${yellow}Usage:${reset} npx get-shit-done-cc [options]\n\n  ${yellow}Options:${reset}\n    ${cyan}-g, --global${reset}              Install globally (to config directory)\n    ${cyan}-l, --local${reset}               Install locally (to current directory)\n    ${cyan}--claude${reset}                  Install for Claude Code only\n    ${cyan}--opencode${reset}                Install for OpenCode only\n    ${cyan}--gemini${reset}                  Install for Gemini only\n    ${cyan}--kilo${reset}                    Install for Kilo only\n    ${cyan}--codex${reset}                   Install for Codex only\n    ${cyan}--copilot${reset}                 Install for Copilot only\n    ${cyan}--antigravity${reset}             Install for Antigravity only\n    ${cyan}--cursor${reset}                  Install for Cursor only\n    ${cyan}--windsurf${reset}                Install for Windsurf only\n    ${cyan}--augment${reset}                 Install for Augment only\n    ${cyan}--trae${reset}                    Install for Trae only\n    ${cyan}--all${reset}                     Install for all runtimes\n    ${cyan}-u, --uninstall${reset}           Uninstall GSD (remove all GSD files)\n    ${cyan}-c, --config-dir <path>${reset}   Specify custom config directory\n    ${cyan}-h, --help${reset}                Show this help message\n    ${cyan}--force-statusline${reset}        Replace existing statusline config\n\n  ${yellow}Examples:${reset}\n    ${dim}# Interactive install (prompts for runtime and location)${reset}\n    npx get-shit-done-cc\n\n    ${dim}# Install for Claude Code globally${reset}\n    npx get-shit-done-cc --claude --global\n\n    ${dim}# Install for Gemini globally${reset}\n    npx get-shit-done-cc --gemini --global\n\n    ${dim}# Install for Kilo globally${reset}\n    npx get-shit-done-cc --kilo --global\n\n    ${dim}# Install for Codex globally${reset}\n    npx get-shit-done-cc --codex --global\n\n    ${dim}# Install for Copilot globally${reset}\n    npx get-shit-done-cc --copilot --global\n\n    ${dim}# Install for Copilot locally${reset}\n    npx get-shit-done-cc --copilot --local\n\n    ${dim}# Install for Antigravity globally${reset}\n    npx get-shit-done-cc --antigravity --global\n\n    ${dim}# Install for Antigravity locally${reset}\n    npx get-shit-done-cc --antigravity --local\n\n    ${dim}# Install for Cursor globally${reset}\n    npx get-shit-done-cc --cursor --global\n\n    ${dim}# Install for Cursor locally${reset}\n    npx get-shit-done-cc --cursor --local\n\n    ${dim}# Install for Windsurf globally${reset}\n    npx get-shit-done-cc --windsurf --global\n\n    ${dim}# Install for Windsurf locally${reset}\n    npx get-shit-done-cc --windsurf --local\n\n    ${dim}# Install for Augment globally${reset}\n    npx get-shit-done-cc --augment --global\n\n    ${dim}# Install for Augment locally${reset}\n    npx get-shit-done-cc --augment --local\n\n    ${dim}# Install for Trae globally${reset}\n    npx get-shit-done-cc --trae --global\n\n    ${dim}# Install for Trae locally${reset}\n    npx get-shit-done-cc --trae --local\n\n    ${dim}# Install for all runtimes globally${reset}\n    npx get-shit-done-cc --all --global\n\n    ${dim}# Install to custom config directory${reset}\n    npx get-shit-done-cc --kilo --global --config-dir ~/.kilo-work\n\n    ${dim}# Install to current project only${reset}\n    npx get-shit-done-cc --claude --local\n\n    ${dim}# Uninstall GSD from Cursor globally${reset}\n    npx get-shit-done-cc --cursor --global --uninstall\n\n  ${yellow}Notes:${reset}\n    The --config-dir option is useful when you have multiple configurations.\n    It takes priority over CLAUDE_CONFIG_DIR / OPENCODE_CONFIG_DIR / GEMINI_CONFIG_DIR / KILO_CONFIG_DIR / CODEX_HOME / COPILOT_CONFIG_DIR / ANTIGRAVITY_CONFIG_DIR / CURSOR_CONFIG_DIR / WINDSURF_CONFIG_DIR / AUGMENT_CONFIG_DIR / TRAE_CONFIG_DIR environment variables.\n`);
+  console.log(`  ${yellow}Usage:${reset} npx get-shit-done-cc [options]\n\n  ${yellow}Options:${reset}\n    ${cyan}-g, --global${reset}              Install globally (to config directory)\n    ${cyan}-l, --local${reset}               Install locally (to current directory)\n    ${cyan}--claude${reset}                  Install for Claude Code only\n    ${cyan}--opencode${reset}                Install for OpenCode only\n    ${cyan}--gemini${reset}                  Install for Gemini only\n    ${cyan}--kilo${reset}                    Install for Kilo only\n    ${cyan}--kiro${reset}                    Install for Kiro only\n    ${cyan}--codex${reset}                   Install for Codex only\n    ${cyan}--copilot${reset}                 Install for Copilot only\n    ${cyan}--antigravity${reset}             Install for Antigravity only\n    ${cyan}--cursor${reset}                  Install for Cursor only\n    ${cyan}--windsurf${reset}                Install for Windsurf only\n    ${cyan}--augment${reset}                 Install for Augment only\n    ${cyan}--trae${reset}                    Install for Trae only\n    ${cyan}--all${reset}                     Install for all runtimes\n    ${cyan}-u, --uninstall${reset}           Uninstall GSD (remove all GSD files)\n    ${cyan}-c, --config-dir <path>${reset}   Specify custom config directory\n    ${cyan}-h, --help${reset}                Show this help message\n    ${cyan}--force-statusline${reset}        Replace existing statusline config\n\n  ${yellow}Examples:${reset}\n    ${dim}# Interactive install (prompts for runtime and location)${reset}\n    npx get-shit-done-cc\n\n    ${dim}# Install for Claude Code globally${reset}\n    npx get-shit-done-cc --claude --global\n\n    ${dim}# Install for Gemini globally${reset}\n    npx get-shit-done-cc --gemini --global\n\n    ${dim}# Install for Kilo globally${reset}\n    npx get-shit-done-cc --kilo --global\n\n    ${dim}# Install for Kiro globally${reset}\n    npx get-shit-done-cc --kiro --global\n\n    ${dim}# Install for Codex globally${reset}\n    npx get-shit-done-cc --codex --global\n\n    ${dim}# Install for Copilot globally${reset}\n    npx get-shit-done-cc --copilot --global\n\n    ${dim}# Install for Copilot locally${reset}\n    npx get-shit-done-cc --copilot --local\n\n    ${dim}# Install for Antigravity globally${reset}\n    npx get-shit-done-cc --antigravity --global\n\n    ${dim}# Install for Antigravity locally${reset}\n    npx get-shit-done-cc --antigravity --local\n\n    ${dim}# Install for Cursor globally${reset}\n    npx get-shit-done-cc --cursor --global\n\n    ${dim}# Install for Cursor locally${reset}\n    npx get-shit-done-cc --cursor --local\n\n    ${dim}# Install for Windsurf globally${reset}\n    npx get-shit-done-cc --windsurf --global\n\n    ${dim}# Install for Windsurf locally${reset}\n    npx get-shit-done-cc --windsurf --local\n\n    ${dim}# Install for Augment globally${reset}\n    npx get-shit-done-cc --augment --global\n\n    ${dim}# Install for Augment locally${reset}\n    npx get-shit-done-cc --augment --local\n\n    ${dim}# Install for Trae globally${reset}\n    npx get-shit-done-cc --trae --global\n\n    ${dim}# Install for Trae locally${reset}\n    npx get-shit-done-cc --trae --local\n\n    ${dim}# Install for all runtimes globally${reset}\n    npx get-shit-done-cc --all --global\n\n    ${dim}# Install to custom config directory${reset}\n    npx get-shit-done-cc --kilo --global --config-dir ~/.kilo-work\n\n    ${dim}# Install to current project only${reset}\n    npx get-shit-done-cc --claude --local\n\n    ${dim}# Uninstall GSD from Cursor globally${reset}\n    npx get-shit-done-cc --cursor --global --uninstall\n\n  ${yellow}Notes:${reset}\n    The --config-dir option is useful when you have multiple configurations.\n    It takes priority over CLAUDE_CONFIG_DIR / OPENCODE_CONFIG_DIR / GEMINI_CONFIG_DIR / KILO_CONFIG_DIR / KIRO_CONFIG_DIR / CODEX_HOME / COPILOT_CONFIG_DIR / ANTIGRAVITY_CONFIG_DIR / CURSOR_CONFIG_DIR / WINDSURF_CONFIG_DIR / AUGMENT_CONFIG_DIR / TRAE_CONFIG_DIR environment variables.\n`);
   process.exit(0);
 }
 
@@ -3310,6 +3334,17 @@ function convertClaudeToKiloFrontmatter(content, { isAgent = false } = {}) {
   return `---\n${newFrontmatter}\n---${body}`;
 }
 
+// Kiro CLI/IDE — based on Kilo conversion with Kiro path conventions.
+function convertClaudeToKiroFrontmatter(content, { isAgent = false } = {}) {
+  let converted = convertClaudeToKiloFrontmatter(content, { isAgent });
+  converted = converted.replace(/~\/\.config\/kilo/g, '~/.kiro');
+  converted = converted.replace(/\$HOME\/\.config\/kilo/g, '$HOME/.kiro');
+  converted = converted.replace(/\.\/\.kilo\//g, './.kiro/');
+  converted = replaceRelativePathReference(converted, '.kilo/skills/', '.kiro/skills/');
+  converted = replaceRelativePathReference(converted, '.kilo/agents/', '.kiro/agents/');
+  return converted;
+}
+
 /**
  * Convert Claude Code markdown command to Gemini TOML format
  * @param {string} content - Markdown file content with YAML frontmatter
@@ -3360,7 +3395,7 @@ function convertClaudeToGeminiToml(content) {
  * @param {string} destDir - Destination directory (e.g., command/)
  * @param {string} prefix - Prefix for filenames (e.g., 'gsd')
  * @param {string} pathPrefix - Path prefix for file references
- * @param {string} runtime - Target runtime ('claude', 'opencode', or 'kilo')
+ * @param {string} runtime - Target runtime ('claude', 'opencode', 'kilo', or 'kiro')
  */
 function copyFlattenedCommands(srcDir, destDir, prefix, pathPrefix, runtime) {
   if (!fs.existsSync(srcDir)) {
@@ -3399,15 +3434,19 @@ function copyFlattenedCommands(srcDir, destDir, prefix, pathPrefix, runtime) {
       const localClaudeRegex = /\.\/\.claude\//g;
       const opencodeDirRegex = /~\/\.opencode\//g;
       const kiloDirRegex = /~\/\.kilo\//g;
+      const kiroDirRegex = /~\/\.kiro\//g;
       content = content.replace(globalClaudeRegex, pathPrefix);
       content = content.replace(globalClaudeHomeRegex, pathPrefix);
       content = content.replace(localClaudeRegex, `./${getDirName(runtime)}/`);
       content = content.replace(opencodeDirRegex, pathPrefix);
       content = content.replace(kiloDirRegex, pathPrefix);
+      content = content.replace(kiroDirRegex, pathPrefix);
       content = processAttribution(content, getCommitAttribution(runtime));
       content = runtime === 'kilo'
         ? convertClaudeToKiloFrontmatter(content)
-        : convertClaudeToOpencodeFrontmatter(content);
+        : runtime === 'kiro'
+          ? convertClaudeToKiroFrontmatter(content)
+          : convertClaudeToOpencodeFrontmatter(content);
 
       fs.writeFileSync(destPath, content);
     }
@@ -3820,6 +3859,7 @@ function copyCommandsAsAntigravitySkills(srcDir, skillsDir, prefix, isGlobal = f
 function copyWithPathReplacement(srcDir, destDir, pathPrefix, runtime, isCommand = false, isGlobal = false) {
   const isOpencode = runtime === 'opencode';
   const isKilo = runtime === 'kilo';
+  const isKiro = runtime === 'kiro';
   const isCodex = runtime === 'codex';
   const isCopilot = runtime === 'copilot';
   const isAntigravity = runtime === 'antigravity';
@@ -3858,9 +3898,9 @@ function copyWithPathReplacement(srcDir, destDir, pathPrefix, runtime, isCommand
       content = processAttribution(content, getCommitAttribution(runtime));
 
       // Convert frontmatter for opencode compatibility
-      if (isOpencode || isKilo) {
-        content = isKilo
-          ? convertClaudeToKiloFrontmatter(content)
+      if (isOpencode || isKilo || isKiro) {
+        content = (isKilo || isKiro)
+          ? (isKiro ? convertClaudeToKiroFrontmatter(content) : convertClaudeToKiloFrontmatter(content))
           : convertClaudeToOpencodeFrontmatter(content);
         fs.writeFileSync(destPath, content);
       } else if (runtime === 'gemini') {
@@ -4101,6 +4141,7 @@ function validateHookFields(settings) {
 function uninstall(isGlobal, runtime = 'claude') {
   const isOpencode = runtime === 'opencode';
   const isKilo = runtime === 'kilo';
+  const isKiro = runtime === 'kiro';
   const isGemini = runtime === 'gemini';
   const isCodex = runtime === 'codex';
   const isCopilot = runtime === 'copilot';
@@ -4124,6 +4165,7 @@ function uninstall(isGlobal, runtime = 'claude') {
   if (runtime === 'opencode') runtimeLabel = 'OpenCode';
   if (runtime === 'gemini') runtimeLabel = 'Gemini';
   if (runtime === 'kilo') runtimeLabel = 'Kilo';
+  if (runtime === 'kiro') runtimeLabel = 'Kiro';
   if (runtime === 'codex') runtimeLabel = 'Codex';
   if (runtime === 'copilot') runtimeLabel = 'Copilot';
   if (runtime === 'antigravity') runtimeLabel = 'Antigravity';
@@ -4144,7 +4186,7 @@ function uninstall(isGlobal, runtime = 'claude') {
   let removedCount = 0;
 
   // 1. Remove GSD commands/skills
-  if (isOpencode || isKilo) {
+  if (isOpencode || isKilo || isKiro) {
     // OpenCode/Kilo: remove command/gsd-*.md files
     const commandDir = path.join(targetDir, 'command');
     if (fs.existsSync(commandDir)) {
@@ -4869,6 +4911,7 @@ function generateManifest(dir, baseDir) {
 function writeManifest(configDir, runtime = 'claude') {
   const isOpencode = runtime === 'opencode';
   const isKilo = runtime === 'kilo';
+  const isKiro = runtime === 'kiro';
   const isGemini = runtime === 'gemini';
   const isCodex = runtime === 'codex';
   const isCopilot = runtime === 'copilot';
@@ -4893,7 +4936,7 @@ function writeManifest(configDir, runtime = 'claude') {
       manifest.files['commands/gsd/' + rel] = hash;
     }
   }
-  if ((isOpencode || isKilo) && fs.existsSync(opencodeCommandDir)) {
+  if ((isOpencode || isKilo || isKiro) && fs.existsSync(opencodeCommandDir)) {
     for (const file of fs.readdirSync(opencodeCommandDir)) {
       if (file.startsWith('gsd-') && file.endsWith('.md')) {
         manifest.files['command/' + file] = fileHash(path.join(opencodeCommandDir, file));
@@ -5006,7 +5049,7 @@ function reportLocalPatches(configDir, runtime = 'claude') {
   try { meta = JSON.parse(fs.readFileSync(metaPath, 'utf8')); } catch { return []; }
 
   if (meta.files && meta.files.length > 0) {
-    const reapplyCommand = (runtime === 'opencode' || runtime === 'kilo' || runtime === 'copilot')
+    const reapplyCommand = (runtime === 'opencode' || runtime === 'kilo' || runtime === 'kiro' || runtime === 'copilot')
       ? '/gsd-reapply-patches'
       : runtime === 'codex'
         ? '$gsd-reapply-patches'
@@ -5031,6 +5074,7 @@ function install(isGlobal, runtime = 'claude') {
   const isOpencode = runtime === 'opencode';
   const isGemini = runtime === 'gemini';
   const isKilo = runtime === 'kilo';
+  const isKiro = runtime === 'kiro';
   const isCodex = runtime === 'codex';
   const isCopilot = runtime === 'copilot';
   const isAntigravity = runtime === 'antigravity';
@@ -5065,6 +5109,7 @@ function install(isGlobal, runtime = 'claude') {
   if (isOpencode) runtimeLabel = 'OpenCode';
   if (isGemini) runtimeLabel = 'Gemini';
   if (isKilo) runtimeLabel = 'Kilo';
+  if (isKiro) runtimeLabel = 'Kiro';
   if (isCodex) runtimeLabel = 'Codex';
   if (isCopilot) runtimeLabel = 'Copilot';
   if (isAntigravity) runtimeLabel = 'Antigravity';
@@ -5085,7 +5130,7 @@ function install(isGlobal, runtime = 'claude') {
   cleanupOrphanedFiles(targetDir);
 
   // OpenCode/Kilo use command/ (flat), Codex uses skills/, Claude/Gemini use commands/gsd/
-  if (isOpencode || isKilo) {
+  if (isOpencode || isKilo || isKiro) {
     // OpenCode/Kilo: flat structure in command/ directory
     const commandDir = path.join(targetDir, 'command');
     fs.mkdirSync(commandDir, { recursive: true });
@@ -5290,6 +5335,8 @@ function install(isGlobal, runtime = 'claude') {
           content = convertClaudeToOpencodeFrontmatter(content, { isAgent: true });
         } else if (isKilo) {
           content = convertClaudeToKiloFrontmatter(content, { isAgent: true });
+        } else if (isKiro) {
+          content = convertClaudeToKiroFrontmatter(content, { isAgent: true });
         } else if (isGemini) {
           content = convertClaudeToGeminiAgent(content);
         } else if (isCodex) {
@@ -5566,7 +5613,7 @@ function install(isGlobal, runtime = 'claude') {
   }
 
   // Configure SessionStart hook for update checking (skip for opencode)
-  if (!isOpencode && !isKilo) {
+  if (!isOpencode && !isKilo && !isKiro) {
     if (!settings.hooks) {
       settings.hooks = {};
     }
@@ -5810,13 +5857,14 @@ function install(isGlobal, runtime = 'claude') {
 function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallStatusline, runtime = 'claude', isGlobal = true, configDir = null) {
   const isOpencode = runtime === 'opencode';
   const isKilo = runtime === 'kilo';
+  const isKiro = runtime === 'kiro';
   const isCodex = runtime === 'codex';
   const isCopilot = runtime === 'copilot';
   const isCursor = runtime === 'cursor';
   const isWindsurf = runtime === 'windsurf';
   const isTrae = runtime === 'trae';
 
-  if (shouldInstallStatusline && !isOpencode && !isKilo && !isCodex && !isCopilot && !isCursor && !isWindsurf && !isTrae) {
+  if (shouldInstallStatusline && !isOpencode && !isKilo && !isKiro && !isCodex && !isCopilot && !isCursor && !isWindsurf && !isTrae) {
     settings.statusLine = {
       type: 'command',
       command: statuslineCommand
@@ -5825,7 +5873,7 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   }
 
   // Write settings when runtime supports settings.json
-  if (!isCodex && !isCopilot && !isKilo && !isCursor && !isWindsurf && !isTrae) {
+  if (!isCodex && !isCopilot && !isKilo && !isKiro && !isCursor && !isWindsurf && !isTrae) {
     writeSettings(settingsPath, settings);
   }
 
@@ -5864,6 +5912,7 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   if (runtime === 'opencode') program = 'OpenCode';
   if (runtime === 'gemini') program = 'Gemini';
   if (runtime === 'kilo') program = 'Kilo';
+  if (runtime === 'kiro') program = 'Kiro';
   if (runtime === 'codex') program = 'Codex';
   if (runtime === 'copilot') program = 'Copilot';
   if (runtime === 'antigravity') program = 'Antigravity';
@@ -5875,6 +5924,7 @@ function finishInstall(settingsPath, settings, statuslineCommand, shouldInstallS
   let command = '/gsd-new-project';
   if (runtime === 'opencode') command = '/gsd-new-project';
   if (runtime === 'kilo') command = '/gsd-new-project';
+  if (runtime === 'kiro') command = '/gsd-new-project';
   if (runtime === 'codex') command = '$gsd-new-project';
   if (runtime === 'copilot') command = '/gsd-new-project';
   if (runtime === 'antigravity') command = '/gsd-new-project';
@@ -5968,11 +6018,12 @@ function promptRuntime(callback) {
     '6': 'cursor',
     '7': 'gemini',
     '8': 'kilo',
-    '9': 'opencode',
-    '10': 'trae',
-    '11': 'windsurf'
+    '9': 'kiro',
+    '10': 'opencode',
+    '11': 'trae',
+    '12': 'windsurf'
   };
-  const allRuntimes = ['claude', 'antigravity', 'augment', 'codex', 'copilot', 'cursor', 'gemini', 'kilo', 'opencode', 'trae', 'windsurf'];
+  const allRuntimes = ['claude', 'antigravity', 'augment', 'codex', 'copilot', 'cursor', 'gemini', 'kilo', 'kiro', 'opencode', 'trae', 'windsurf'];
 
   console.log(`  ${yellow}Which runtime(s) would you like to install for?${reset}\n\n  ${cyan}1${reset}) Claude Code  ${dim}(~/.claude)${reset}
   ${cyan}2${reset}) Antigravity  ${dim}(~/.gemini/antigravity)${reset}
@@ -5982,10 +6033,11 @@ function promptRuntime(callback) {
   ${cyan}6${reset}) Cursor       ${dim}(~/.cursor)${reset}
   ${cyan}7${reset}) Gemini       ${dim}(~/.gemini)${reset}
   ${cyan}8${reset}) Kilo         ${dim}(~/.config/kilo)${reset}
-  ${cyan}9${reset}) OpenCode     ${dim}(~/.config/opencode)${reset}
-  ${cyan}10${reset}) Trae         ${dim}(~/.trae)${reset}
-  ${cyan}11${reset}) Windsurf     ${dim}(~/.codeium/windsurf)${reset}
-  ${cyan}12${reset}) All
+  ${cyan}9${reset}) Kiro        ${dim}(~/.kiro)${reset}
+  ${cyan}10${reset}) OpenCode     ${dim}(~/.config/opencode)${reset}
+  ${cyan}11${reset}) Trae         ${dim}(~/.trae)${reset}
+  ${cyan}12${reset}) Windsurf     ${dim}(~/.codeium/windsurf)${reset}
+  ${cyan}13${reset}) All
 
   ${dim}Select multiple: 1,2,6 or 1 2 6${reset}
 `);
@@ -5996,7 +6048,7 @@ function promptRuntime(callback) {
     const input = answer.trim() || '1';
 
     // "All" shortcut
-    if (input === '12') {
+    if (input === '13') {
       callback(allRuntimes);
       return;
     }
@@ -6120,6 +6172,7 @@ if (process.env.GSD_TEST_MODE) {
     convertClaudeCommandToCodexSkill,
     convertClaudeToOpencodeFrontmatter,
     convertClaudeToKiloFrontmatter,
+    convertClaudeToKiroFrontmatter,
     configureOpencodePermissions,
     neutralizeAgentReferences,
     GSD_CODEX_MARKER,
