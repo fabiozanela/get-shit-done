@@ -44,6 +44,13 @@ elif [ -n "$XDG_CONFIG_HOME" ]; then
   fi
 fi
 
+if [ -z "$PATCHES_DIR" ] && [ -n "$KIRO_CONFIG_DIR" ]; then
+  candidate="$(expand_home "$KIRO_CONFIG_DIR")/gsd-local-patches"
+  if [ -d "$candidate" ]; then
+    PATCHES_DIR="$candidate"
+  fi
+fi
+
 if [ -z "$PATCHES_DIR" ] && [ -n "$OPENCODE_CONFIG_DIR" ]; then
   candidate="$(expand_home "$OPENCODE_CONFIG_DIR")/gsd-local-patches"
   if [ -d "$candidate" ]; then
@@ -84,7 +91,9 @@ fi
 
 # Global install — detect runtime config directory defaults
 if [ -z "$PATCHES_DIR" ]; then
-  if [ -d "$HOME/.config/kilo/gsd-local-patches" ]; then
+  if [ -d "$HOME/.kiro/gsd-local-patches" ]; then
+    PATCHES_DIR="$HOME/.kiro/gsd-local-patches"
+  elif [ -d "$HOME/.config/kilo/gsd-local-patches" ]; then
     PATCHES_DIR="$HOME/.config/kilo/gsd-local-patches"
   elif [ -d "$HOME/.config/opencode/gsd-local-patches" ]; then
     PATCHES_DIR="$HOME/.config/opencode/gsd-local-patches"
@@ -100,7 +109,7 @@ if [ -z "$PATCHES_DIR" ]; then
 fi
 # Local install fallback — check all runtime directories
 if [ ! -d "$PATCHES_DIR" ]; then
-  for dir in .config/kilo .kilo .config/opencode .opencode .gemini .codex .claude; do
+  for dir in .kiro .config/kilo .kilo .config/opencode .opencode .gemini .codex .claude; do
     if [ -d "./$dir/gsd-local-patches" ]; then
       PATCHES_DIR="./$dir/gsd-local-patches"
       break

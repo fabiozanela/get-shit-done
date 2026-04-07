@@ -15,6 +15,7 @@ First, derive `PREFERRED_CONFIG_DIR` and `PREFERRED_RUNTIME` from the invoking p
 - If the path contains `/get-shit-done/workflows/update.md`, strip that suffix and store the remainder as `PREFERRED_CONFIG_DIR`
 - Path contains `/.codex/` -> `codex`
 - Path contains `/.gemini/` -> `gemini`
+- Path contains `/.kiro/`, or `PREFERRED_CONFIG_DIR` contains `kiro/settings/mcp.json` / `settings/mcp.json` -> `kiro`
 - Path contains `/.config/kilo/` or `/.kilo/`, or `PREFERRED_CONFIG_DIR` contains `kilo.json` / `kilo.jsonc` -> `kilo`
 - Path contains `/.config/opencode/` or `/.opencode/`, or `PREFERRED_CONFIG_DIR` contains `opencode.json` / `opencode.jsonc` -> `opencode`
 - Otherwise -> `claude`
@@ -36,7 +37,7 @@ expand_home() {
 # Using an array instead of a space-separated string ensures correct
 # iteration in both bash and zsh (zsh does not word-split unquoted
 # variables by default). Fixes #1173.
-RUNTIME_DIRS=( "claude:.claude" "opencode:.config/opencode" "opencode:.opencode" "gemini:.gemini" "kilo:.config/kilo" "kilo:.kilo" "codex:.codex" )
+RUNTIME_DIRS=( "claude:.claude" "opencode:.config/opencode" "opencode:.opencode" "gemini:.gemini" "kiro:.kiro" "kilo:.config/kilo" "kilo:.kilo" "codex:.codex" )
 ENV_RUNTIME_DIRS=()
 
 # PREFERRED_CONFIG_DIR / PREFERRED_RUNTIME should be set from execution_context
@@ -44,7 +45,9 @@ ENV_RUNTIME_DIRS=()
 if [ -n "$PREFERRED_CONFIG_DIR" ]; then
   PREFERRED_CONFIG_DIR="$(expand_home "$PREFERRED_CONFIG_DIR")"
   if [ -z "$PREFERRED_RUNTIME" ]; then
-    if [ -f "$PREFERRED_CONFIG_DIR/kilo.json" ] || [ -f "$PREFERRED_CONFIG_DIR/kilo.jsonc" ]; then
+    if [ -f "$PREFERRED_CONFIG_DIR/kiro/settings/mcp.json" ] || [ -f "$PREFERRED_CONFIG_DIR/settings/mcp.json" ]; then
+      PREFERRED_RUNTIME="kiro"
+    elif [ -f "$PREFERRED_CONFIG_DIR/kilo.json" ] || [ -f "$PREFERRED_CONFIG_DIR/kilo.jsonc" ]; then
       PREFERRED_RUNTIME="kilo"
     elif [ -f "$PREFERRED_CONFIG_DIR/opencode.json" ] || [ -f "$PREFERRED_CONFIG_DIR/opencode.jsonc" ]; then
       PREFERRED_RUNTIME="opencode"
@@ -60,6 +63,8 @@ if [ -z "$PREFERRED_RUNTIME" ]; then
     PREFERRED_RUNTIME="codex"
   elif [ -n "$GEMINI_CONFIG_DIR" ]; then
     PREFERRED_RUNTIME="gemini"
+  elif [ -n "$KIRO_CONFIG_DIR" ]; then
+    PREFERRED_RUNTIME="kiro"
   elif [ -n "$KILO_CONFIG_DIR" ]; then
     PREFERRED_RUNTIME="kilo"
   elif [ -n "$KILO_CONFIG" ]; then
@@ -78,7 +83,7 @@ fi
 # runtime directories.
 if [ -n "$PREFERRED_CONFIG_DIR" ] && { [ -f "$PREFERRED_CONFIG_DIR/get-shit-done/VERSION" ] || [ -f "$PREFERRED_CONFIG_DIR/get-shit-done/workflows/update.md" ]; }; then
   INSTALL_SCOPE="GLOBAL"
-  for dir in .claude .config/opencode .opencode .gemini .config/kilo .kilo .codex; do
+  for dir in .claude .config/opencode .opencode .gemini .kiro .config/kilo .kilo .codex; do
     resolved_local="$(cd "./$dir" 2>/dev/null && pwd)"
     if [ -n "$resolved_local" ] && [ "$resolved_local" = "$PREFERRED_CONFIG_DIR" ]; then
       INSTALL_SCOPE="LOCAL"
@@ -104,6 +109,9 @@ if [ -n "$CLAUDE_CONFIG_DIR" ]; then
 fi
 if [ -n "$GEMINI_CONFIG_DIR" ]; then
   ENV_RUNTIME_DIRS+=( "gemini:$(expand_home "$GEMINI_CONFIG_DIR")" )
+fi
+if [ -n "$KIRO_CONFIG_DIR" ]; then
+  ENV_RUNTIME_DIRS+=( "kiro:$(expand_home "$KIRO_CONFIG_DIR")" )
 fi
 if [ -n "$KILO_CONFIG_DIR" ]; then
   ENV_RUNTIME_DIRS+=( "kilo:$(expand_home "$KILO_CONFIG_DIR")" )
@@ -231,7 +239,7 @@ echo "$TARGET_RUNTIME"
 Parse output:
 - Line 1 = installed version (`0.0.0` means unknown version)
 - Line 2 = install scope (`LOCAL`, `GLOBAL`, or `UNKNOWN`)
-- Line 3 = target runtime (`claude`, `opencode`, `gemini`, `kilo`, or `codex`)
+- Line 3 = target runtime (`claude`, `opencode`, `gemini`, `kiro`, `kilo`, or `codex`)
 - If scope is `UNKNOWN`, proceed to install step using `--claude --global` fallback.
 
 If multiple runtime installs are detected and the invoking runtime cannot be determined from execution_context, ask the user which runtime to update before running install.
@@ -329,8 +337,8 @@ Exit.
 - `agents/gsd-*` files will be replaced
 
 (Paths are relative to detected runtime install location:
-global: `~/.claude/`, `~/.config/opencode/`, `~/.opencode/`, `~/.gemini/`, `~/.config/kilo/`, or `~/.codex/`
-local: `./.claude/`, `./.config/opencode/`, `./.opencode/`, `./.gemini/`, `./.kilo/`, or `./.codex/`)
+global: `~/.claude/`, `~/.config/opencode/`, `~/.opencode/`, `~/.gemini/`, `~/.kiro/`, `~/.config/kilo/`, or `~/.codex/`
+local: `./.claude/`, `./.config/opencode/`, `./.opencode/`, `./.gemini/`, `./.kiro/`, `./.kilo/`, or `./.codex/`)
 
 Your custom files in other locations are preserved:
 - Custom commands not in `commands/gsd/` ✓
@@ -396,6 +404,11 @@ fi
 if [ -n "$GEMINI_CONFIG_DIR" ]; then
   CACHE_DIRS+=( "$(expand_home "$GEMINI_CONFIG_DIR")" )
 fi
+if [ -n "$KIRO_CONFIG_DIR" ]; then
+  CACHE_DIRS+=( "$(expand_home "$KIRO_CONFIG_DIR")" )
+else
+  CACHE_DIRS+=( "$HOME/.kiro" )
+fi
 if [ -n "$KILO_CONFIG_DIR" ]; then
   CACHE_DIRS+=( "$(expand_home "$KILO_CONFIG_DIR")" )
 elif [ -n "$KILO_CONFIG" ]; then
@@ -420,7 +433,7 @@ for dir in "${CACHE_DIRS[@]}"; do
   fi
 done
 
-for dir in .claude .config/opencode .opencode .gemini .config/kilo .kilo .codex; do
+for dir in .claude .config/opencode .opencode .gemini .kiro .config/kilo .kilo .codex; do
   rm -f "./$dir/cache/gsd-update-check.json"
   rm -f "$HOME/$dir/cache/gsd-update-check.json"
 done

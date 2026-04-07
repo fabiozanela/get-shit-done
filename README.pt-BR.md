@@ -4,7 +4,7 @@
 
 [English](README.md) · **Português** · [简体中文](README.zh-CN.md) · [日本語](README.ja-JP.md)
 
-**Um sistema leve e poderoso de meta-prompting, engenharia de contexto e desenvolvimento orientado a especificação para Claude Code, OpenCode, Gemini CLI, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae e Cline.**
+**Um sistema leve e poderoso de meta-prompting, engenharia de contexto e desenvolvimento orientado a especificação para Claude Code, OpenCode, Gemini CLI, Kilo, Kiro, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae e Cline.**
 
 **Resolve context rot — a degradação de qualidade que acontece conforme o Claude enche a janela de contexto.**
 
@@ -21,6 +21,12 @@
 
 ```bash
 npx get-shit-done-cc@latest
+```
+
+Ou instale direto deste repositório:
+
+```bash
+npx github:fabiozanela/get-shit-done
 ```
 
 **Funciona em Mac, Windows e Linux.**
@@ -91,8 +97,14 @@ Quality gates embutidos capturam problemas reais: detecção de schema drift sin
 npx get-shit-done-cc@latest
 ```
 
+Direto deste repositório:
+
+```bash
+npx github:fabiozanela/get-shit-done
+```
+
 O instalador pede:
-1. **Runtime** — Claude Code, OpenCode, Gemini, Kilo, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae, Cline, ou todos
+1. **Runtime** — Claude Code, OpenCode, Gemini, Kilo, Kiro, Codex, Copilot, Cursor, Windsurf, Antigravity, Augment, Trae, Cline, ou todos
 2. **Local** — Global (todos os projetos) ou local (apenas projeto atual)
 
 Verifique com:
@@ -131,6 +143,10 @@ npx get-shit-done-cc --gemini --global
 npx get-shit-done-cc --kilo --global
 npx get-shit-done-cc --kilo --local
 
+# Kiro (AWS)
+npx get-shit-done-cc --kiro --global
+npx get-shit-done-cc --kiro --local
+
 # Codex
 npx get-shit-done-cc --codex --global
 npx get-shit-done-cc --codex --local
@@ -164,7 +180,7 @@ npx get-shit-done-cc --all --global
 ```
 
 Use `--global` (`-g`) ou `--local` (`-l`) para pular a pergunta de local.
-Use `--claude`, `--opencode`, `--gemini`, `--kilo`, `--codex`, `--copilot`, `--cursor`, `--windsurf`, `--antigravity`, `--augment`, `--trae`, `--cline` ou `--all` para pular a pergunta de runtime.
+Use `--claude`, `--opencode`, `--gemini`, `--kilo`, `--kiro`, `--codex`, `--copilot`, `--cursor`, `--windsurf`, `--antigravity`, `--augment`, `--trae`, `--cline` ou `--all` para pular a pergunta de runtime.
 
 </details>
 
@@ -430,6 +446,7 @@ npx get-shit-done-cc --claude --global --uninstall
 npx get-shit-done-cc --opencode --global --uninstall
 npx get-shit-done-cc --gemini --global --uninstall
 npx get-shit-done-cc --kilo --global --uninstall
+npx get-shit-done-cc --kiro --global --uninstall
 npx get-shit-done-cc --codex --global --uninstall
 npx get-shit-done-cc --copilot --global --uninstall
 npx get-shit-done-cc --cursor --global --uninstall
@@ -443,6 +460,7 @@ npx get-shit-done-cc --claude --local --uninstall
 npx get-shit-done-cc --opencode --local --uninstall
 npx get-shit-done-cc --gemini --local --uninstall
 npx get-shit-done-cc --kilo --local --uninstall
+npx get-shit-done-cc --kiro --local --uninstall
 npx get-shit-done-cc --codex --local --uninstall
 npx get-shit-done-cc --copilot --local --uninstall
 npx get-shit-done-cc --cursor --local --uninstall
