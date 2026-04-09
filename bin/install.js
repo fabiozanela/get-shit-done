@@ -3928,6 +3928,42 @@ function copyCommandsAsAntigravitySkills(srcDir, skillsDir, prefix, isGlobal = f
 }
 
 /**
+ * Save user-generated files from destDir to an in-memory map before a wipe.
+ *
+ * @param {string} destDir - Directory that is about to be wiped
+ * @param {string[]} fileNames - Relative file names (e.g. ['USER-PROFILE.md']) to preserve
+ * @returns {Map<string, string>} Map of fileName → file content (only entries that existed)
+ */
+function preserveUserArtifacts(destDir, fileNames) {
+  const saved = new Map();
+  for (const name of fileNames) {
+    const fullPath = path.join(destDir, name);
+    if (fs.existsSync(fullPath)) {
+      try {
+        saved.set(name, fs.readFileSync(fullPath, 'utf8'));
+      } catch { /* skip unreadable files */ }
+    }
+  }
+  return saved;
+}
+
+/**
+ * Restore user-generated files saved by preserveUserArtifacts after a wipe.
+ *
+ * @param {string} destDir - Directory that was wiped and recreated
+ * @param {Map<string, string>} saved - Map returned by preserveUserArtifacts
+ */
+function restoreUserArtifacts(destDir, saved) {
+  for (const [name, content] of saved) {
+    const fullPath = path.join(destDir, name);
+    try {
+      fs.mkdirSync(path.dirname(fullPath), { recursive: true });
+      fs.writeFileSync(fullPath, content, 'utf8');
+    } catch { /* skip unwritable paths */ }
+  }
+}
+
+/**
  * Recursively copy directory, replacing paths in .md files
  * Deletes existing destDir first to remove orphaned files from previous versions
  * @param {string} srcDir - Source directory
@@ -4718,6 +4754,15 @@ function uninstall(isGlobal, runtime = 'claude') {
     }
   }
 
+  // Remove the file manifest that the installer wrote at install time.
+  // Without this step the metadata file persists after uninstall (#1908).
+  const manifestPath = path.join(targetDir, MANIFEST_NAME);
+  if (fs.existsSync(manifestPath)) {
+    fs.rmSync(manifestPath, { force: true });
+    removedCount++;
+    console.log(`  ${green}✓${reset} Removed ${MANIFEST_NAME}`);
+  }
+
   if (removedCount === 0) {
     console.log(`  ${yellow}⚠${reset} No GSD files found to remove.`);
   }
@@ -5387,10 +5432,13 @@ function install(isGlobal, runtime = 'claude') {
     }
 
     // Clean up legacy commands/gsd/ from previous global installs
+    // Preserve user-generated files (dev-preferences.md) before wiping the directory
     const legacyCommandsDir = path.join(targetDir, 'commands', 'gsd');
     if (fs.existsSync(legacyCommandsDir)) {
+      const savedLegacyArtifacts = preserveUserArtifacts(legacyCommandsDir, ['dev-preferences.md']);
       fs.rmSync(legacyCommandsDir, { recursive: true });
       console.log(`  ${green}✓${reset} Removed legacy commands/gsd/ directory`);
+      restoreUserArtifacts(legacyCommandsDir, savedLegacyArtifacts);
     }
   } else {
     // Claude Code local: commands/gsd/ format — Claude Code reads local project
@@ -5422,9 +5470,12 @@ function install(isGlobal, runtime = 'claude') {
   }
 
   // Copy get-shit-done skill with path replacement
+  // Preserve user-generated files before the wipe-and-copy so they survive re-install
   const skillSrc = path.join(src, 'get-shit-done');
   const skillDest = path.join(targetDir, 'get-shit-done');
+  const savedGsdArtifacts = preserveUserArtifacts(skillDest, ['USER-PROFILE.md']);
   copyWithPathReplacement(skillSrc, skillDest, pathPrefix, runtime, false, isGlobal);
+  restoreUserArtifacts(skillDest, savedGsdArtifacts);
   if (verifyInstalled(skillDest, 'get-shit-done')) {
     console.log(`  ${green}✓${reset} Installed get-shit-done`);
   } else {
@@ -5719,21 +5770,24 @@ function install(isGlobal, runtime = 'claude') {
     return;
   }
   const settings = validateHookFields(cleanupOrphanedHooks(rawSettings));
+  // Local installs anchor paths to $CLAUDE_PROJECT_DIR so hooks resolve
+  // correctly regardless of the shell's current working directory (#1906).
+  const localPrefix = '"$CLAUDE_PROJECT_DIR"/' + dirName;
   const statuslineCommand = isGlobal
     ? buildHookCommand(targetDir, 'gsd-statusline.js')
-    : 'node ' + dirName + '/hooks/gsd-statusline.js';
+    : 'node ' + localPrefix + '/hooks/gsd-statusline.js';
   const updateCheckCommand = isGlobal
     ? buildHookCommand(targetDir, 'gsd-check-update.js')
-    : 'node ' + dirName + '/hooks/gsd-check-update.js';
+    : 'node ' + localPrefix + '/hooks/gsd-check-update.js';
   const contextMonitorCommand = isGlobal
     ? buildHookCommand(targetDir, 'gsd-context-monitor.js')
-    : 'node ' + dirName + '/hooks/gsd-context-monitor.js';
+    : 'node ' + localPrefix + '/hooks/gsd-context-monitor.js';
   const promptGuardCommand = isGlobal
     ? buildHookCommand(targetDir, 'gsd-prompt-guard.js')
-    : 'node ' + dirName + '/hooks/gsd-prompt-guard.js';
+    : 'node ' + localPrefix + '/hooks/gsd-prompt-guard.js';
   const readGuardCommand = isGlobal
     ? buildHookCommand(targetDir, 'gsd-read-guard.js')
-    : 'node ' + dirName + '/hooks/gsd-read-guard.js';
+    : 'node ' + localPrefix + '/hooks/gsd-read-guard.js';
 
   // Enable experimental agents for Gemini CLI (required for custom sub-agents)
   if (isGemini) {
@@ -5886,7 +5940,7 @@ function install(isGlobal, runtime = 'claude') {
     // /gsd-quick or /gsd-fast for state-tracked changes. Advisory only.
     const workflowGuardCommand = isGlobal
       ? buildHookCommand(targetDir, 'gsd-workflow-guard.js')
-      : 'node ' + dirName + '/hooks/gsd-workflow-guard.js';
+      : 'node ' + localPrefix + '/hooks/gsd-workflow-guard.js';
     const hasWorkflowGuardHook = settings.hooks[preToolEvent].some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('gsd-workflow-guard'))
     );
@@ -5911,7 +5965,7 @@ function install(isGlobal, runtime = 'claude') {
     // Configure commit validation hook (Conventional Commits enforcement, opt-in)
     const validateCommitCommand = isGlobal
       ? 'bash ' + targetDir.replace(/\\/g, '/') + '/hooks/gsd-validate-commit.sh'
-      : 'bash ' + dirName + '/hooks/gsd-validate-commit.sh';
+      : 'bash ' + localPrefix + '/hooks/gsd-validate-commit.sh';
     const hasValidateCommitHook = settings.hooks[preToolEvent].some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('gsd-validate-commit'))
     );
@@ -5938,7 +5992,7 @@ function install(isGlobal, runtime = 'claude') {
     // Configure session state orientation hook (opt-in)
     const sessionStateCommand = isGlobal
       ? 'bash ' + targetDir.replace(/\\/g, '/') + '/hooks/gsd-session-state.sh'
-      : 'bash ' + dirName + '/hooks/gsd-session-state.sh';
+      : 'bash ' + localPrefix + '/hooks/gsd-session-state.sh';
     const hasSessionStateHook = settings.hooks.SessionStart.some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('gsd-session-state'))
     );
@@ -5960,7 +6014,7 @@ function install(isGlobal, runtime = 'claude') {
     // Configure phase boundary detection hook (opt-in)
     const phaseBoundaryCommand = isGlobal
       ? 'bash ' + targetDir.replace(/\\/g, '/') + '/hooks/gsd-phase-boundary.sh'
-      : 'bash ' + dirName + '/hooks/gsd-phase-boundary.sh';
+      : 'bash ' + localPrefix + '/hooks/gsd-phase-boundary.sh';
     const hasPhaseBoundaryHook = settings.hooks[postToolEvent].some(entry =>
       entry.hooks && entry.hooks.some(h => h.command && h.command.includes('gsd-phase-boundary'))
     );
@@ -6350,6 +6404,8 @@ if (process.env.GSD_TEST_MODE) {
     writeManifest,
     reportLocalPatches,
     validateHookFields,
+    preserveUserArtifacts,
+    restoreUserArtifacts,
   };
 } else {
 
