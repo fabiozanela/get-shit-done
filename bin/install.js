@@ -3345,6 +3345,37 @@ function convertClaudeToKiroFrontmatter(content, { isAgent = false } = {}) {
   return converted;
 }
 
+function convertSlashCommandsToKiroSkillMentions(content) {
+  return content.replace(/gsd:/gi, 'gsd-');
+}
+
+function convertClaudeToKiroMarkdown(content) {
+  let converted = convertSlashCommandsToKiroSkillMentions(content);
+  converted = converted.replace(/\$HOME\/\.claude\//g, '$HOME/.kiro/');
+  converted = converted.replace(/~\/\.claude\//g, '~/.kiro/');
+  converted = converted.replace(/\.\/\.claude\//g, './.kiro/');
+  converted = converted.replace(/\.claude\/skills\//g, '.kiro/skills/');
+  converted = converted.replace(/\bAskUserQuestion\b/g, 'conversational prompting');
+  converted = neutralizeAgentReferences(converted, 'AGENTS.md');
+  converted = converted.replace(/\bClaude Code\b/g, 'Kiro');
+  return converted;
+}
+
+function convertClaudeCommandToKiroSkill(content, skillName) {
+  const converted = convertClaudeToKiroMarkdown(content);
+  const { frontmatter, body } = extractFrontmatterAndBody(converted);
+  let description = `Run GSD workflow ${skillName}.`;
+  if (frontmatter) {
+    const maybeDescription = extractFrontmatterField(frontmatter, 'description');
+    if (maybeDescription) {
+      description = maybeDescription;
+    }
+  }
+  description = toSingleLine(description);
+  const shortDescription = description.length > 180 ? `${description.slice(0, 177)}...` : description;
+  return `---\nname: ${yamlIdentifier(skillName)}\ndescription: ${yamlQuote(shortDescription)}\n---\n${body}`;
+}
+
 /**
  * Convert Claude Code markdown command to Gemini TOML format
  * @param {string} content - Markdown file content with YAML frontmatter
@@ -3677,6 +3708,54 @@ function copyCommandsAsTraeSkills(srcDir, skillsDir, prefix, pathPrefix, runtime
       content = content.replace(traeDirRegex, pathPrefix);
       content = processAttribution(content, getCommitAttribution(runtime));
       content = convertClaudeCommandToTraeSkill(content, skillName);
+
+      fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content);
+    }
+  }
+
+  recurse(srcDir, prefix);
+}
+
+function copyCommandsAsKiroSkills(srcDir, skillsDir, prefix, pathPrefix, runtime) {
+  if (!fs.existsSync(srcDir)) {
+    return;
+  }
+
+  fs.mkdirSync(skillsDir, { recursive: true });
+
+  const existing = fs.readdirSync(skillsDir, { withFileTypes: true });
+  for (const entry of existing) {
+    if (entry.isDirectory() && entry.name.startsWith(`${prefix}-`)) {
+      fs.rmSync(path.join(skillsDir, entry.name), { recursive: true });
+    }
+  }
+
+  function recurse(currentSrcDir, currentPrefix) {
+    const entries = fs.readdirSync(currentSrcDir, { withFileTypes: true });
+
+    for (const entry of entries) {
+      const srcPath = path.join(currentSrcDir, entry.name);
+      if (entry.isDirectory()) {
+        recurse(srcPath, `${currentPrefix}-${entry.name}`);
+        continue;
+      }
+
+      if (!entry.name.endsWith('.md')) {
+        continue;
+      }
+
+      const baseName = entry.name.replace('.md', '');
+      const skillName = `${currentPrefix}-${baseName}`;
+      const skillDir = path.join(skillsDir, skillName);
+      fs.mkdirSync(skillDir, { recursive: true });
+
+      let content = fs.readFileSync(srcPath, 'utf8');
+      content = content.replace(/~\/\.claude\//g, pathPrefix);
+      content = content.replace(/\$HOME\/\.claude\//g, pathPrefix);
+      content = content.replace(/\.\/\.claude\//g, `./${getDirName(runtime)}/`);
+      content = content.replace(/~\/\.kiro\//g, pathPrefix);
+      content = processAttribution(content, getCommitAttribution(runtime));
+      content = convertClaudeCommandToKiroSkill(content, skillName);
 
       fs.writeFileSync(path.join(skillDir, 'SKILL.md'), content);
     }
@@ -4186,7 +4265,7 @@ function uninstall(isGlobal, runtime = 'claude') {
   let removedCount = 0;
 
   // 1. Remove GSD commands/skills
-  if (isOpencode || isKilo || isKiro) {
+  if (isOpencode || isKilo) {
     // OpenCode/Kilo: remove command/gsd-*.md files
     const commandDir = path.join(targetDir, 'command');
     if (fs.existsSync(commandDir)) {
@@ -4198,6 +4277,38 @@ function uninstall(isGlobal, runtime = 'claude') {
         }
       }
       console.log(`  ${green}✓${reset} Removed GSD commands from command/`);
+    }
+  } else if (isKiro) {
+    const skillsDir = path.join(targetDir, 'skills');
+    if (fs.existsSync(skillsDir)) {
+      let skillCount = 0;
+      const entries = fs.readdirSync(skillsDir, { withFileTypes: true });
+      for (const entry of entries) {
+        if (entry.isDirectory() && entry.name.startsWith('gsd-')) {
+          fs.rmSync(path.join(skillsDir, entry.name), { recursive: true });
+          skillCount++;
+        }
+      }
+      if (skillCount > 0) {
+        removedCount++;
+        console.log(`  ${green}✓${reset} Removed ${skillCount} GSD skill(s) from skills/`);
+      }
+    }
+
+    const staleCommandDir = path.join(targetDir, 'command');
+    if (fs.existsSync(staleCommandDir)) {
+      const files = fs.readdirSync(staleCommandDir);
+      let removedCommands = 0;
+      for (const file of files) {
+        if (file.startsWith('gsd-') && file.endsWith('.md')) {
+          fs.unlinkSync(path.join(staleCommandDir, file));
+          removedCommands++;
+        }
+      }
+      if (removedCommands > 0) {
+        removedCount++;
+        console.log(`  ${green}✓${reset} Removed ${removedCommands} stale GSD command(s) from command/`);
+      }
     }
   } else if (isCodex || isCursor || isWindsurf || isTrae) {
     // Codex/Cursor/Windsurf/Trae: remove skills/gsd-*/SKILL.md skill directories
@@ -4936,14 +5047,14 @@ function writeManifest(configDir, runtime = 'claude') {
       manifest.files['commands/gsd/' + rel] = hash;
     }
   }
-  if ((isOpencode || isKilo || isKiro) && fs.existsSync(opencodeCommandDir)) {
+  if ((isOpencode || isKilo) && fs.existsSync(opencodeCommandDir)) {
     for (const file of fs.readdirSync(opencodeCommandDir)) {
       if (file.startsWith('gsd-') && file.endsWith('.md')) {
         manifest.files['command/' + file] = fileHash(path.join(opencodeCommandDir, file));
       }
     }
   }
-  if ((isCodex || isCopilot || isAntigravity || isCursor || isWindsurf || isTrae || (!isOpencode && !isGemini)) && fs.existsSync(codexSkillsDir)) {
+  if ((isKiro || isCodex || isCopilot || isAntigravity || isCursor || isWindsurf || isTrae || (!isOpencode && !isGemini && !isKilo)) && fs.existsSync(codexSkillsDir)) {
     for (const skillName of listCodexSkillNames(codexSkillsDir)) {
       const skillRoot = path.join(codexSkillsDir, skillName);
       const skillHashes = generateManifest(skillRoot);
@@ -5129,8 +5240,9 @@ function install(isGlobal, runtime = 'claude') {
   // Clean up orphaned files from previous versions
   cleanupOrphanedFiles(targetDir);
 
-  // OpenCode/Kilo use command/ (flat), Codex uses skills/, Claude/Gemini use commands/gsd/
-  if (isOpencode || isKilo || isKiro) {
+  // OpenCode/Kilo use command/ (flat), Kiro/Codex and several IDEs use skills/,
+  // Claude/Gemini use commands/gsd/
+  if (isOpencode || isKilo) {
     // OpenCode/Kilo: flat structure in command/ directory
     const commandDir = path.join(targetDir, 'command');
     fs.mkdirSync(commandDir, { recursive: true });
@@ -5143,6 +5255,28 @@ function install(isGlobal, runtime = 'claude') {
       console.log(`  ${green}✓${reset} Installed ${count} commands to command/`);
     } else {
       failures.push('command/gsd-*');
+    }
+  } else if (isKiro) {
+    const skillsDir = path.join(targetDir, 'skills');
+    const gsdSrc = path.join(src, 'commands', 'gsd');
+    copyCommandsAsKiroSkills(gsdSrc, skillsDir, 'gsd', pathPrefix, runtime);
+    const installedSkillNames = listCodexSkillNames(skillsDir);
+    if (installedSkillNames.length > 0) {
+      console.log(`  ${green}✓${reset} Installed ${installedSkillNames.length} skills to skills/`);
+    } else {
+      failures.push('skills/gsd-*');
+    }
+
+    const staleCommandDir = path.join(targetDir, 'command');
+    if (fs.existsSync(staleCommandDir)) {
+      const staleCommands = fs.readdirSync(staleCommandDir)
+        .filter(file => file.startsWith('gsd-') && file.endsWith('.md'));
+      for (const file of staleCommands) {
+        fs.unlinkSync(path.join(staleCommandDir, file));
+      }
+      if (staleCommands.length > 0) {
+        console.log(`  ${green}✓${reset} Removed ${staleCommands.length} stale GSD command(s) from command/`);
+      }
     }
   } else if (isCodex) {
     const skillsDir = path.join(targetDir, 'skills');
@@ -6173,6 +6307,8 @@ if (process.env.GSD_TEST_MODE) {
     convertClaudeToOpencodeFrontmatter,
     convertClaudeToKiloFrontmatter,
     convertClaudeToKiroFrontmatter,
+    convertClaudeToKiroMarkdown,
+    convertClaudeCommandToKiroSkill,
     configureOpencodePermissions,
     neutralizeAgentReferences,
     GSD_CODEX_MARKER,
@@ -6210,6 +6346,7 @@ if (process.env.GSD_TEST_MODE) {
     convertClaudeCommandToTraeSkill,
     convertClaudeAgentToTraeAgent,
     copyCommandsAsTraeSkills,
+    copyCommandsAsKiroSkills,
     writeManifest,
     reportLocalPatches,
     validateHookFields,

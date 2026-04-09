@@ -123,12 +123,12 @@ The installer prompts you to choose:
 
 Verify with:
 - Claude Code / Gemini / Copilot / Antigravity: `/gsd-help`
-- OpenCode / Kilo / Augment / Trae: `/gsd-help`
+- OpenCode / Kilo / Kiro / Augment / Trae: `/gsd-help`
 - Codex: `$gsd-help`
 - Cline: GSD installs via `.clinerules` — verify by checking `.clinerules` exists
 
 > [!NOTE]
-> Claude Code 2.1.88+ and Codex install as skills (`skills/gsd-*/SKILL.md`). Older Claude Code versions use `commands/gsd/`. Cline uses `.clinerules` for configuration. The installer handles all formats automatically.
+> Claude Code 2.1.88+, Kiro, and Codex install as skills (`skills/gsd-*/SKILL.md`). Older Claude Code versions use `commands/gsd/`. OpenCode and Kilo use `command/gsd-*.md`. Cline uses `.clinerules` for configuration. The installer handles all formats automatically.
 
 > [!TIP]
 > For source-based installs or environments where npm is unavailable, see **[docs/manual-update.md](docs/manual-update.md)**.
@@ -826,6 +826,7 @@ This prevents Claude from reading these files entirely, regardless of what comma
 **Commands not found after install?**
 - Restart your runtime to reload commands/skills
 - Verify files exist in `~/.claude/skills/gsd-*/SKILL.md` (Claude Code 2.1.88+) or `~/.claude/commands/gsd/` (legacy)
+- For Kiro, verify skills exist in `~/.kiro/skills/gsd-*/SKILL.md` (global) or `./.kiro/skills/gsd-*/SKILL.md` (local)
 - For Codex, verify skills exist in `~/.codex/skills/gsd-*/SKILL.md` (global) or `./.codex/skills/gsd-*/SKILL.md` (local)
 
 **Commands not working as expected?**

@@ -4,12 +4,20 @@ const { describe, test, beforeEach, afterEach } = require('node:test');
 const assert = require('node:assert/strict');
 const os = require('os');
 const path = require('path');
+const fs = require('node:fs');
+const { createTempDir, cleanup } = require('./helpers.cjs');
 
 const {
   getDirName,
   getGlobalDir,
   getConfigDirFromHome,
   convertClaudeToKiroFrontmatter,
+  convertClaudeToKiroMarkdown,
+  convertClaudeCommandToKiroSkill,
+  copyCommandsAsKiroSkills,
+  install,
+  uninstall,
+  writeManifest,
 } = require('../bin/install.js');
 
 describe('Kiro runtime directory mapping', () => {
@@ -69,6 +77,109 @@ describe('Kiro conversion', () => {
     assert.ok(converted.includes('~/.kiro'));
     assert.ok(converted.includes('./.kiro/skills/'));
     assert.ok(!converted.includes('.kilo/skills/'));
+  });
+
+  test('converts Claude markdown references for Kiro skills', () => {
+    const input = [
+      'Claude Code reads ./.claude/skills/ before using ~/.claude/get-shit-done/.',
+      'Run /gsd:plan-phase and ask with AskUserQuestion.',
+    ].join('\n');
+
+    const converted = convertClaudeToKiroMarkdown(input);
+
+    assert.ok(converted.includes('Kiro reads ./.kiro/skills/'), converted);
+    assert.ok(converted.includes('~/.kiro/get-shit-done/'), converted);
+    assert.ok(converted.includes('/gsd-plan-phase'), converted);
+    assert.ok(!converted.includes('AskUserQuestion'), converted);
+  });
+
+  test('converts commands to Kiro skills with Agent Skills frontmatter', () => {
+    const command = `---
+name: gsd:new-project
+description: Initialize a project
+allowed-tools:
+  - Read
+  - Write
+---
+
+Use ./.claude/skills/ and run /gsd:help.
+`;
+
+    const converted = convertClaudeCommandToKiroSkill(command, 'gsd-new-project');
+
+    assert.ok(converted.includes('name: gsd-new-project'), converted);
+    assert.ok(converted.includes('description: "Initialize a project"'), converted);
+    assert.ok(!converted.includes('allowed-tools'), converted);
+    assert.ok(converted.includes('./.kiro/skills/'), converted);
+    assert.ok(converted.includes('/gsd-help'), converted);
+  });
+});
+
+describe('copyCommandsAsKiroSkills', () => {
+  let tmpDir;
+
+  beforeEach(() => {
+    tmpDir = createTempDir('gsd-kiro-copy-');
+  });
+
+  afterEach(() => {
+    cleanup(tmpDir);
+  });
+
+  test('creates one skill directory per GSD command', () => {
+    const srcDir = path.join(__dirname, '..', 'commands', 'gsd');
+    const skillsDir = path.join(tmpDir, '.kiro', 'skills');
+
+    copyCommandsAsKiroSkills(srcDir, skillsDir, 'gsd', '$HOME/.kiro/', 'kiro');
+
+    const generated = path.join(skillsDir, 'gsd-new-project', 'SKILL.md');
+    assert.ok(fs.existsSync(generated), generated);
+
+    const content = fs.readFileSync(generated, 'utf8');
+    assert.ok(content.includes('name: gsd-new-project'), content);
+    assert.ok(content.includes('description:'), content);
+  });
+});
+
+describe('Kiro local install/uninstall', () => {
+  let tmpDir;
+  let previousCwd;
+
+  beforeEach(() => {
+    tmpDir = createTempDir('gsd-kiro-install-');
+    previousCwd = process.cwd();
+    process.chdir(tmpDir);
+  });
+
+  afterEach(() => {
+    process.chdir(previousCwd);
+    cleanup(tmpDir);
+  });
+
+  test('installs GSD into ./.kiro skills and removes it cleanly', () => {
+    const result = install(false, 'kiro');
+    const targetDir = path.join(tmpDir, '.kiro');
+
+    assert.deepStrictEqual(result, {
+      settingsPath: null,
+      settings: null,
+      statuslineCommand: null,
+      runtime: 'kiro',
+      configDir: fs.realpathSync(targetDir),
+    });
+
+    assert.ok(fs.existsSync(path.join(targetDir, 'skills', 'gsd-new-project', 'SKILL.md')));
+    assert.ok(fs.existsSync(path.join(targetDir, 'get-shit-done', 'VERSION')));
+    assert.ok(fs.existsSync(path.join(targetDir, 'agents')));
+
+    const manifest = writeManifest(targetDir, 'kiro');
+    assert.ok(Object.keys(manifest.files).some(file => file.startsWith('skills/gsd-new-project/')), manifest);
+    assert.ok(!Object.keys(manifest.files).some(file => file.startsWith('command/gsd-')), manifest);
+
+    uninstall(false, 'kiro');
+
+    assert.ok(!fs.existsSync(path.join(targetDir, 'skills', 'gsd-new-project')), 'Kiro skill directory removed');
+    assert.ok(!fs.existsSync(path.join(targetDir, 'get-shit-done')), 'get-shit-done removed');
   });
 });
 
